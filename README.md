@@ -16,9 +16,24 @@ BiliLite 不是"更好的 B 站客户端",而是**用 B 站内容作为学习素
 
 ## 📱 界面预览
 
-| 手机端效果 | 平板端效果 |
-|---|---|
-| [手机端效果(首页/我的/收藏页)](docs/界面预览.md) | [平板端效果(播放页/首页网格)](docs/界面预览.md) |
+### 手机端效果
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/phone_1.jpg" width="220"><br><b>首页</b><br>视频列表 · 搜索筛选</td>
+    <td align="center"><img src="docs/screenshots/phone_2.jpg" width="220"><br><b>我的</b><br>个人中心 · 收藏/历史</td>
+    <td align="center"><img src="docs/screenshots/phone_3.jpg" width="220"><br><b>收藏页</b><br>收藏视频列表</td>
+  </tr>
+</table>
+
+### 平板端效果
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tablet_1.jpg" width="420"><br><b>视频播放页</b><br>播放器 + 分P/章节列表</td>
+    <td align="center"><img src="docs/screenshots/tablet_2.jpg" width="420"><br><b>首页(横屏)</b><br>网格布局视频列表</td>
+  </tr>
+</table>
 
 ## 🛠 技术栈
 
