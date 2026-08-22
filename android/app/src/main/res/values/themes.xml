@@ -1,0 +1,2 @@
+<resources><style name="Theme.BiliLite" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">#FFFFFF</item><item name="android:statusBarColor">#FFFFFF</item></style></resources>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>BiliLite · 学习专注 · 纯本地原型</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#000;--panel:#0d0d0f;--card:#111114;--line:#222;--fg:#f5f5f7;--dim:#8a8a8e;--faint:#5a5a5e;--hi:#fff}
+  html,body{height:100%;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  #app{max-width:520px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+
+  /* 顶栏 */
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+    border-bottom:1px solid var(--line)}
+  .brand{font-size:18px;font-weight:700;letter-spacing:.5px}
+  .brand small{color:var(--dim);font-weight:400;font-size:12px;margin-left:8px}
+  header .ic{color:var(--dim);cursor:pointer;font-size:20px;line-height:1}
+
+  /* Tab */
+  nav{position:sticky;bottom:0;display:flex;border-top:1px solid var(--line);
+    background:var(--bg)}
+  nav a{flex:1;text-align:center;padding:10px 0 14px;color:var(--dim);text-decoration:none;font-size:12px}
+  nav a.on{color:var(--fg);font-weight:600}
+  nav a .glyph{display:block;font-size:18px;margin-bottom:2px}
+
+  main{flex:1;overflow-y:auto;padding:12px 16px 20px}
+  .page{display:none}.page.on{display:block}
+
+  .sec{font-size:12px;color:var(--dim);letter-spacing:.08em;margin:14px 2px 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+  .row{display:flex;align-items:center;gap:12px}
+  .thumb{width:52px;height:34px;border-radius:6px;background:#19191d;flex:none;position:relative}
+  .thumb::after{content:"";position:absolute;inset:9px 20px;background:#333;border-radius:2px}
+  .t{flex:1;min-width:0}
+  .t .tt{font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .t .meta{font-size:11px;color:var(--dim);margin-top:3px}
+  .t .prog{height:3px;background:#26262b;border-radius:2px;margin-top:6px;overflow:hidden}
+  .t .prog i{display:block;height:100%;background:var(--fg);width:0}
+  .chip{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:2px 8px;flex:none}
+  .chip.quick{background:#fff;color:#000;border-color:#fff}
+  button.act{background:var(--fg);color:#000;border:none;border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+  button.act.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+
+  input,textarea,select{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    color:var(--fg);padding:11px 12px;font-size:14px;margin-top:8px}
+  textarea{min-height:70px;resize:none}
+  label{font-size:12px;color:var(--dim)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .metric .k{font-size:11px;color:var(--dim)}.metric .v{font-size:22px;font-weight:700;margin-top:4px}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tags span{font-size:11px;border:1px solid var(--line);border-radius:16px;padding:3px 10px;color:var(--dim)}
+  .tags span.on{background:var(--fg);color:#000;border-color:#fff}
+
+  /* 遮罩(专注密码) */
+  .mask{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;gap:14px}
+  .mask input{max-width:260px;text-align:center;letter-spacing:.6em;font-size:22px}
+  .err{color:#ff3b30;font-size:12px;min-height:16px}
+  .hide{display:none!important}
+  .banner{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;color:var(--dim);line-height:1.6}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">BiliLite<small>学习专注</small></div>
+    <div class="ic" id="icSet">⚙</div>
+  </header>
+
+  <!-- 登录/首次遮罩 -->
+  <div class="mask" id="mLogin">
+    <div style="font-size:24px">BiliLite</div>
+    <div style="color:var(--dim);font-size:13px">学习专注型 B 站客户端(纯本地原型·模拟登录)</div>
+    <input id="loginUser" placeholder="B 站账号(模拟)">
+    <button class="act" id="btnLogin" style="margin-top:8px">登录</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+
+  <div class="mask hide" id="mLock">
+    <div style="font-size:16px;font-weight:600">专注密码</div>
+    <div style="color:var(--dim);font-size:12px" id="lockTitle"></div>
+    <input id="pin" inputmode="numeric" maxlength="6" placeholder="6 位数字">
+    <button class="act" id="btnPin" style="margin-top:8px">确认</button>
+    <div class="err" id="pinErr"></div>
+  </div>
+
+  <main id="main">
+    <section class="page on" id="p_home"></section>
+    <section class="page" id="p_queue"></section>
+    <section class="page" id="p_report"></section>
+    <section class="page" id="p_settings"></section>
+  </main>
+
+  <nav>
+    <a data-p="home" class="on" href="#"><span class="glyph">◻</span>学习</a>
+    <a data-p="queue" href="#"><span class="glyph">≡</span>队列</a>
+    <a data-p="report" href="#"><span class="glyph">▤</span>报告</a>
+  </nav>
+</div>
+
+<script>
+// ================= 状态(全本地,模拟) =================
+const DB = new (function(){
+  const store='bililite_db';
+  let data = JSON.parse(localStorage.getItem(store)||'null');
+  if(!data){ data = seed(); localStorage.setItem(store, JSON.stringify(data)); }
+  function seed(){ return {
+    logged:false, user:'',
+    pin: null,                     // 6位密码(明文模拟;真机用 keystore/单向hash)
+    ups:[],                        // 添加的UP主
+    videos:[],                     // 已添加UP的视频(模拟)
+    queue:[],                      // 待学习队列
+    done:[],                       // 已学习队列
+    recs:[],                       // 观看记录
+  };}
+  this.get=()=>data;
+  this.save=()=>localStorage.setItem(store, JSON.stringify(data));
+  this.reset=()=>{ data=seed(); this.save(); };
+})();
+let S = DB.get();
+
+// 模拟UP主与视频库(仅当前没加时生成候选)
+const FAKE_UPS=[
+  {id:'u1',name:'3Blue1Brown',fans:'512.3万',tags:['数学'],vids:[{'p':'微积分的本质','n':13},{'p':'线性代数本质','n':16}]},
+  {id:'u2',name:'宋浩老师official',fans:'268.7万',tags:['高数'],vids:[{'p':'高数下册网课','n':46},{'p':'线性代数','n':40}]},
+  {id:'u3',name:'Python编程从入门到精通',fans:'189.2万',tags:['Python'],vids:[{'p':'Python基础教程','n':80},{'p':'爬虫实战','n':24}]},
+  {id:'u4',name:'李永乐老师官方',fans:'420.1万',tags:['物理'],vids:[{'p':'高考物理','n':64}]},
+];
+
+// ---------- 渲染 ----------
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s).replace(/</g,'&lt;');}
+
+function renderHome(){
+  const tag = S.tag || '全部';
+  const upIds = S.ups.map(u=>u.id);
+  const vids = S.videos.filter(v=> upIds.includes(v.upId));
+  const byTag = tag==='全部'? vids : vids.filter(v=> (v.tags||[]).includes(tag));
+  const box = $('p_home');
+  let h='';
+  h+='<div class="sec">标签</div><div class="tags">' + ['全部',...allTags()].map(t=>
+     `<span class="${t===tag?'on':''}" onclick="setTag('${esc(t)}')">${esc(t)}</span>`).join('') +'</div>';
+  h+='<div class="sec">已添加 UP · '+S.ups.length+' 个</div>';
+  if(S.ups.length===0){
+    h+='<div class="banner">尚未添加任何 UP 主。到「设置」→「管理UP主」中添加(需专注密码)。<br>首页只显示你主动添加的 UP 的内容。</div>';
+  }
+  byTag.slice().reverse().forEach(v=>{
+    const rec = watchRec(v.id);
+    const series = seriesOf(v);
+    h+=`<div class="card"><div class="row">
+      <div class="thumb"></div>
+      <div class="t">
+        <div class="tt">${esc(v.title)}</div>
+        <div class="meta">${series.length?('已学 '+learnedCnt(series,v)+' / '+series.length+' 集 · '):''}${esc(upName(v.upId))} · ${v.min}m</div>
+        <div class="prog"><i style="width:${rec?rec.p:0}%"></i></div>
+      </div>
+      <span class="chip ${state.mode==='quick'?'quick':''}">${S.mode==='quick'?'快速':'精读'}</span>
+      <button class="act" onclick="openVideo(${v.id})">播放</button>
+    </div></div>`;
+  });
+  if(byTag.length===0 && S.ups.length>0) h+='<div class="banner">该标签下暂无内容。</div>';
+  box.innerHTML=h;
+}
+
+function renderQueue(){
+  const box=$('p_queue');
+  const todoView = S.queue.map(q=>{const v=findVideo(q.vid); const rec=watchRec(q.vid);return {
+    q,...v, rec:rec?rec.p:0, done: rec&&rec.p>=95 && (state.mode!=='deep'||rec.summary)?true:false
+  };});
+  let h='<div class="sec">待学习队列 · '+S.queue.length+'</div>';
+  if(!S.queue.length) h+='<div class="banner">收藏后进入待学习队列;观看 ≥95% 并(精读)写总结后自动移入已学习。</div>';
+  todoView.forEach(x=>{
+    h+=`<div class="card"><div class="row"><div class="thumb"></div>
+      <div class="t"><div class="tt">${esc(x.title)}</div>
+      <div class="prog"><i style="width:${x.rec}%"></i></div></div>
+      ${x.rec>=95 && S.mode!=='quick' && !(S.recs.find(r=>r.vid===x.id)||{}).summary
+        ? `<textarea id="sum${x.id}" placeholder="写一句总结以完成精读"></textarea>
+           <button class="act" style="margin-top:6px" onclick="saveSummary(${x.id})">标记完成</button>`
+        : `<button class="act ghost" onclick="openVideo(${x.id})">继续</button>`}
+      </div></div>`;
+  });
+  h+='<div class="sec" style="margin-top:20px">已学习队列 · '+S.done.length+'</div>';
+  if(!S.done.length) h+='<div class="banner">(空) 把视频看到位后,会出现在这里。</div>';
+  S.done.slice().reverse().forEach(x=>{
+    h+=`<div class="card"><div class="row"><div class="thumb"></div>
+      <div class="t"><div class="tt">${esc(x.title)}</div><div class="meta">已完成 · 100%</div></div></div></div>`;
+  });
+  box.innerHTML=h;
+}
+
+function renderReport(){
+  const box=$('p_report');
+  const recs=S.recs;
+  const secs = recs.reduce((a,r)=>a+r.secs,0);
+  const avg = recs.length? Math.round(recs.reduce((a,r)=>a+r.p,0)/recs.length):0;
+  const tagCount={}; recs.forEach(r=>r.tags&&r.tags.forEach(t=>tagCount[t]=(tagCount[t]||0)+1));
+  const top = Object.entries(tagCount).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  box.innerHTML=`
+    <div class="sec">学习报告 · 本周</div>
+    <div class="grid">
+      <div class="metric"><div class="k">学习时长</div><div class="v">${Math.round(secs/60)}分钟</div></div>
+      <div class="metric"><div class="k">已看视频</div><div class="v">${recs.length}</div></div>
+      <div class="metric"><div class="k">精读完成</div><div class="v">${S.done.length}</div></div>
+      <div class="metric"><div class="k">平均完成度</div><div class="v">${avg}%</div></div>
+    </div>
+    <div class="sec">标签分布 TOP3</div>
+    <div class="banner">${top.length?top.map(t=>`${t[0]} × ${t[1]}`).join(' · '):'暂无数据'}</div>`;
+}
+
+// ---------- 工具 ----------
+function allTags(){ const s=new Set(); S.ups.forEach(u=>u.tags.forEach(t=>s.add(t))); 
+  S.videos.forEach(v=>v.tags&&v.tags.forEach(t=>s.add(t))); return [...s]; }
+function state(){ return S; }
+function setTag(t){ S.tag=t; DB.save(); renderHome(); }
+function upName(id){ const u=S.ups.find(x=>x.id===id); return u?u.name:''; }
+function findVideo(id){ return S.videos.find(v=>v.id===id); }
+function watchRec(vid){ return S.recs.find(r=>r.vid===vid); }
+function seriesOf(v){ return S.videos.filter(x=>x.upId===v.upId && x.series===v.series && x.series); }
+function learnedCnt(series,v){ return series.filter(x=>{const r=watchRec(x.id); return r&&r.p>=95;}).length; }
+function stateTagsOf(){ }
+// 修正: tag filter 用视频自己的 tags
+function tagsOf(v){ return v.tags||[]; }
+
+function saveSummary(id){ const t=$('sum'+id).value.trim();
+  if(!t){ alert('请写一句总结'); return; }
+  let r=S.recs.find(x=>x.vid===id); if(!r){ r={vid:id,p:0,secs:0,summary:''}; S.recs.push(r);} r.summary=t;
+  const v=findVideo(id); S.queue=S.queue.filter(x=>x.vid!==id);
+  if(!S.done.find(d=>d.vid===id)) S.done.push(v);
+  DB.save(); renderQueue(); }
+
+// ---------- 视频/计时(模拟) ----------
+let player=null;
+function openVideo(id){ player={vid:id, start:Date.now(), lastP:0}; }
+// 用 setInterval 模拟推进进度
+let tick=null;
+function startPlayer(){ if(tick) return; tick=setInterval(()=>{ if(player){ player.lastP=Math.min(100, (Date.now()-player.start)/120); writeRec(player, true); renderAll(); } },600); }
+function stopPlayer(){ if(tick){clearInterval(tick);tick=null;} if(player){writeRec(player,false); player=null; renderAll();} }
+function writeRec(p, live){
+  let r=S.recs.find(x=>x.vid===p.vid);
+  const secs=(Date.now()-p.start)/1000;
+  if(!r) r={vid:p.vid,p:0,secs:0,summary:''};
+  r.p=Math.max(r.p, p.lastP); r.secs+= (live?0:secs);
+  // 移动队列
+  if(r.p>=95){
+    const v=findVideo(p.vid);
+    const q=S.queue.filter(x=>x.vid===p.vid);
+    if(q.length && (!needSummary() || r.summary)){ S.queue=S.queue.filter(x=>x.vid!==p.vid); 
+      if(!S.done.find(d=>d.vid===p.vid)) S.done.push(v); }
+  }
+  if(!S.recs.find(x=>x.vid===p.vid)) S.recs.push(r); 
+  else S.recs=S.recs.map(x=>x.vid===p.vid?r:x);
+  DB.save();
+}
+function needSummary(){ return state.mode!=='quick'; }
+
+// ---------- 开关集 ----------
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') stopPlayer(); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopPlayer(); });
+window.addEventListener('pagehide',()=>stopPlayer());
+
+// ---------- 专注密码 ----------
+let lockCb=null, lockSetup=false;
+function requireLock(title, cb){ lockCb=cb; lockSetup=(S.pin===null); 
+  $('lockTitle').textContent = lockSetup? '首次设置 6 位专注密码(不可找回)' : '输入专注密码: '+title;
+  $('pin').value=''; $('pinErr').textContent='';
+  $('mLock').classList.remove('hide'); }
+function tryPin(){ const v=$('pin').value.trim();
+  if(!/^\d{6}$/.test(v)){ $('pinErr').textContent='请输入 6 位数字'; return; }
+  if(lockSetup){ S.pin=v; DB.save(); closeLock(true); }
+  else if(v===S.pin){ closeLock(true); }
+  else $('pinErr').textContent='密码错误'; }
+function closeLock(ok){ $('mLock').classList.add('hide'); const cb=lockCb; lockCb=null; if(ok&&cb)cb(); }
+$('btnPin').onclick=tryPin;
+$('pin').addEventListener('keydown',e=>{ if(e.key==='Enter') tryPin(); });
+
+// ---------- 设置页 / 管理UP主 ----------
+function renderSettings(){
+  $('p_settings').innerHTML=`
+    <div class="sec">设置</div>
+    <div class="card"><label>默认播放模式</label>
+      <select onchange="setMode(this.value)"><option value="deep" ${state.mode!=='quick'?'selected':''}>精读模式(需写总结)</option><option value="quick" ${state.mode==='quick'?'selected':''}>快速浏览</option></select></div>
+    <div class="card"><label>播放倍速区间</label>
+      <div style="display:flex;gap:8px;margin-top:8px">${[0.5,0.75,1,1.25,1.5,2].map(s=>`<button class="act ghost" onclick="playSpeed(${s})">${s}X</button>`).join('')}</div></div>
+    <button class="act" style="width:100%;margin-top:8px" onclick="manageUps()">管理UP主</button>
+    <button class="act ghost" style="width:100%;margin-top:8px" onclick="resetData()">重置数据(清空全部)</button>
+    <div class="banner" style="margin-top:14px">管理 UP 主(添加/删除/标签)需专注密码。</div>`;
+}
+
+function manageUps(){
+  requireLock('管理UP主', ()=>{
+    // 显示管理页
+    S._managing=true;
+    let h='<div class="sec">管理UP主(现有)</div>';
+    if(!S.ups.length) h+='<div class="banner">暂无</div>';
+    S.ups.forEach(u=>{
+      h+=`<div class="card"><div class="row"><div class="t"><div class="tt">${esc(u.name)}</div>
+        <div class="meta">粉丝 ${esc(u.fans||'--')} · ${(u.tags||[]).join(' / ')}</div></div>
+        <button class="act ghost" onclick="removeUp('${u.id}')">删除</button></div></div>`;
+    });
+    h+='<div class="sec">添加 UP(搜索已收编候选)</div>';
+    h+='<input id="upSearch" placeholder="搜索UP主名"><button class="act" style="width:100%;margin-top:8px" onclick="searchUps()">搜索</button>';
+    h+='<div id="upResult"></div>';
+    h+='<button class="act ghost" style="width:100%;margin-top:10px" onclick="renderHome();$(\'p_settings\').classList.remove(\'on\');$(\'p_home\').classList.add(\'on\');navOn(\'home\')">完成</button>';
+    $('p_settings').innerHTML=h;
+  });
+}
+function searchUps(){
+  const q=$('upSearch').value.trim().toLowerCase();
+  const res=FAKE_UPS.filter(u=>u.name.toLowerCase().includes(q));
+  const box=$('upResult');
+  box.innerHTML= res.map(u=>{
+    const added = S.ups.some(x=>x.id===u.id);
+    return `<div class="card"><div class="row"><div class="t">
+      <div class="tt">${esc(u.name)}</div><div class="meta">粉丝 ${esc(u.fans)}</div></div>
+      <button class="act ${added?'ghost':''}" ${added?'disabled':''} onclick="addUp('${u.id}')">${added?'已添加':'添加'}</button></div></div>`;
+  }).join('') || '<div class="banner">无结果(仅可添加候选 UP)</div>';
+}
+function addUp(id){
+  const u=FAKE_UPS.find(x=>x.id===id); if(!u||S.ups.some(x=>x.id===id)) return;
+  S.ups.push({id:u.id,name:u.name,fans:u.fans,tags:[...u.tags],addedAt:Date.now()});
+  // 生成该UP的视频
+  u.vids.forEach((s,si)=>{
+    for(let i=1;i<=s.n;i++){
+      S.videos.push({id:S.videos.length+1, upId:u.id, series:s.p, seriesIndex:i, seriesN:s.n,
+        title:`${s.p} · P${i}`, min:Math.max(4,Math.round(6+Math.random()*14)), tags:[...u.tags]});
+    }
+  });
+  DB.save(); searchUps(); renderHome();
+}
+function removeUp(id){ requireLock('删除UP主',()=>{
+  S.ups=S.ups.filter(u=>u.id!==id);
+  const ids=new Set(S.videos.filter(v=>v.upId===id).map(v=>v.id));
+  S.videos=S.videos.filter(v=>v.upId!==id);
+  S.queue=S.queue.filter(q=>!ids.has(q.vid));
+  S.recs=S.recs.filter(r=>!ids.has(r.vid));
+  DB.save(); manageUps(); renderHome();
+}); }
+
+// ---------- 通用 ----------
+function navOn(p){ document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p)); }
+document.querySelectorAll('nav a').forEach(a=>a.onclick=e=>{
+  e.preventDefault(); document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  $('p_'+a.dataset.p).classList.add('on'); navOn(a.dataset.p); renderAll();
+});
+$('icSet').onclick=()=>{ document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  $('p_settings').classList.add('on'); navOn('home'); renderSettings(); };
+function setMode(m){ S.mode=m; DB.save(); renderAll(); }
+function playSpeed(s){ S.speed=s; toast('倍速 '+s+'X'); DB.save(); }
+function resetData(){ requireLock('重置数据',()=>{ DB.reset(); location.reload(); }); }
+
+function renderAll(){ renderHome(); renderQueue(); renderReport(); }
+window.renderAll=renderAll;
+
+// ---------- 初始化/登录 ----------
+$('btnLogin').onclick=()=>{
+  const u=$('loginUser').value.trim();
+  if(!u){ $('loginErr').textContent='请输入(模拟)账号'; return; }
+  S.logged=true; S.user=u; DB.save(); $('mLogin').classList.add('hide');
+  if(S.pin===null){ requireLock('首次设置',()=>{ renderAll(); }); } else renderAll();
+};
+
+// 设备离开即暂停(模拟已写:pagehide/visibilitychange)
+startPlayer(); // 空跑等待 openVideo
+</script>
+</body>
+</html>
