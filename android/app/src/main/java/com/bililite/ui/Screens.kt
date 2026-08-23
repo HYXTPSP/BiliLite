@@ -120,7 +120,8 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
             if (all.isEmpty()) {
                 msg = "该 UP 暂无公开视频"
             } else {
-                withContext(Dispatchers.IO) { db.videoDao().upsertAll(all) }
+                val merged = withContext(Dispatchers.IO) { mergeFavorites(all) }
+                withContext(Dispatchers.IO) { db.videoDao().upsertAll(merged) }
                 reload()
                 msg = "已同步 ${all.size} 个视频"
             }
@@ -146,7 +147,8 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
                         val knownIds = existing.map { it.id }.toSet()
                         val newOnes = fresh.filter { it.id !in knownIds }
                         added += newOnes.size
-                        withContext(Dispatchers.IO) { db.videoDao().upsertAll(fresh) }
+                        val merged = withContext(Dispatchers.IO) { mergeFavorites(fresh) }
+                        withContext(Dispatchers.IO) { db.videoDao().upsertAll(merged) }
                     }
                 }
                 newCount = added
@@ -154,6 +156,13 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
             } catch (_: Exception) { /* 静默失败 */ }
             finally { checking = false }
         }
+    }
+
+    /** 入库前保留已有的收藏标记(避免 REPLACE 把 favorite 重置为 false)。 */
+    private suspend fun mergeFavorites(fresh: List<Video>): List<Video> {
+        val favIds = db.videoDao().favoriteIds().toSet()
+        if (favIds.isEmpty()) return fresh
+        return fresh.map { if (it.id in favIds) it.copy(favorite = true) else it }
     }
     private suspend fun fetchAllVideos(mid: String): List<Video> {
         val out = ArrayList<Video>()
@@ -778,9 +787,10 @@ fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {}, onPlay: (Vide
             Text("免责声明", color = Color(0xFF8E8E93))
         }
 
-        // 底部占满,QQ 群文字贴最下方
+        // 底部占满,QQ 群文字贴最下方(加粗放大)
         Spacer(Modifier.weight(1f))
-        Text("QQ交流群：811598424", color = Color(0xFF8E8E93), fontSize = 12.sp,
+        Text("QQ交流群：811598424", color = Color(0xFF1C1C1E), fontSize = 16.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
             modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp))
     }
 }

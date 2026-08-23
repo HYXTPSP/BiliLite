@@ -103,6 +103,7 @@ abstract class BiliDb : RoomDatabase() {
     @Query("DELETE FROM video WHERE upId=:upId") suspend fun deleteByUp(upId: String)
     @Query("UPDATE video SET favorite=:fav WHERE id=:id") suspend fun setFavorite(id: Long, fav: Boolean)
     @Query("SELECT * FROM video WHERE favorite=1 ORDER BY id DESC") suspend fun favorites(): List<Video>
+    @Query("SELECT id FROM video WHERE favorite=1") suspend fun favoriteIds(): List<Long>
 }
 @Dao interface WatchDao {
     @Query("SELECT * FROM watch WHERE videoId=:id") suspend fun get(id: Long): Watch?

@@ -101,6 +101,7 @@ fun PlayerScreen(
     var curCid by remember { mutableStateOf(cid) }
     var err by remember { mutableStateOf("") }
     var initialSec by remember { mutableStateOf(0L) }
+    var seeked by remember { mutableStateOf(false) }   // 是否已应用过续播定位
     var desc by remember { mutableStateOf("") }
 
     val activity = LocalContext.current as? Activity
@@ -169,7 +170,8 @@ fun PlayerScreen(
                         onToggleFullscreen = { fullscreen = !fullscreen; setImmersive(activity, fullscreen) },
                         reImmerse = { if (fullscreen) setImmersive(activity, true) },
                         modifier = Modifier.fillMaxSize(),
-                        initialSec = if (curCid == cid) initialSec else 0L,
+                        initialSec = if (!seeked) initialSec else 0L,
+                        onSeeked = { seeked = true },
                         onProgress = onProgress)
                 }
             }
@@ -305,6 +307,7 @@ private fun Player(
     reImmerse: () -> Unit = {},
     modifier: Modifier = Modifier,
     initialSec: Long = 0,
+    onSeeked: () -> Unit = {},
     onProgress: (Long) -> Unit = {}
 ) {
     val ctx = LocalContext.current
@@ -316,8 +319,8 @@ private fun Player(
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // cid 变化:先停旧源再换新源
-    LaunchedEffect(bvid, cid) {
+    // cid / 续播位置变化:先停旧源再换新源并定位
+    LaunchedEffect(bvid, cid, initialSec) {
         err = ""
         exo.stop()              // 停掉上一P,避免声音叠加
         exo.clearMediaItems()
@@ -336,7 +339,10 @@ private fun Player(
             url = u
             applySource(exo, u)
             exo.prepare()
-            if (initialSec > 0) exo.seekTo(initialSec * 1000)  // 断点续播(P 切换时 initialSec=0)
+            if (initialSec > 0) {
+                exo.seekTo(initialSec * 1000)   // 断点续播
+                onSeeked()
+            }
             exo.play()
         }
     }
