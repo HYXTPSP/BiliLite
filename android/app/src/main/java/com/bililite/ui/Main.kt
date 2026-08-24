@@ -11,6 +11,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +70,10 @@ fun BiliLiteApp() {
     var tab by remember { mutableStateOf(0) } // 0 首页 1 收藏 2 我的
     // 播放中的视频 (null = 未在播放)
     var playing by remember { mutableStateOf<Video?>(null) }
+    // 书签/历史跳转的目标秒数（非 null 时播放器从该时间点开始）
+    var pendingSeekSec by remember { mutableStateOf<Long?>(null) }
+    // 跳转的目标分P cid（非 null 时优先于 Video.cid，解决多P非P1跳转）
+    var pendingCid by remember { mutableStateOf<Long?>(null) }
     val cur = playing
     // 返回手势: 播放页 → 回终端; 非首页 tab → 回首页; 首页 → 双击退出
     val activity = (LocalContext.current as? android.app.Activity)
@@ -85,13 +92,20 @@ fun BiliLiteApp() {
         val upName = up?.name ?: ""
         val upFace = up?.face ?: ""
         Surface(Modifier.fillMaxSize(), color = BILIBLACK) {
-            PlayerScreen(ctx = ctx, api = vm.api, bvid = cur.bvid, cid = cur.cid,
-                title = cur.title, upName = upName, upFace = upFace, onBack = { playing = null },
+            PlayerScreen(ctx = ctx, api = vm.api, bvid = cur.bvid, cid = pendingCid ?: cur.cid,
+                title = cur.title, upName = upName, upFace = upFace, onBack = { playing = null; pendingCid = null },
                 videoId = cur.id, durationSec = cur.durationSec, playCount = cur.playCount,
                 pubdate = cur.pubdate,
                 resolveCid = { bvid -> vm.resolveCid(bvid) },
                 loadInitialSec = { id -> vm.lastPosition(id) },
-                onProgress = { secs -> vm.recordProgress(cur.id, secs, cur.durationSec) })
+                bookmarkSeekSec = pendingSeekSec,
+                onBookmarkConsumed = { pendingSeekSec = null },
+                onProgress = { secs -> vm.recordProgress(cur.id, secs, cur.durationSec) },
+                onProgressCid = { secs, cid -> vm.recordProgress(cur.id, secs, cur.durationSec, cid) },
+                bookmarks = vm.bookmarks,
+                onAddBookmark = { bvid, t, cid, idx, pt, ts -> vm.addBookmark(bvid, t, cid, idx, pt, ts) },
+                onRenameBookmark = { id, note -> vm.renameBookmark(id, note) },
+                onDeleteBookmark = { id -> vm.deleteBookmark(id) })
         }
         return
     }
@@ -110,8 +124,13 @@ fun BiliLiteApp() {
                             NavigationRailItem(
                                 selected = tab == i,
                                 onClick = { tab = i },
-                                icon = { Text(if (t == "首页") "🏠" else "👤",
-                                    fontSize = 20.sp) },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (t == "首页") Icons.Filled.Home else Icons.Filled.Person,
+                                        contentDescription = t,
+                                        tint = if (tab == i) Color.Black else Color(0xFF8E8E93),
+                                        modifier = Modifier.size(22.dp))
+                                },
                                 label = { Text(t, color = if (tab == i) Color.Black else Color(0xFF8E8E93),
                                     fontSize = 11.sp) },
                                 colors = NavigationRailItemDefaults.colors(
@@ -126,7 +145,10 @@ fun BiliLiteApp() {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         when (tab) {
                             0 -> HomeScreen(vm, onPlay = { playing = it }, isTablet = true)
-                            else -> ProfileScreen(vm, onLoggedOut = { loggedIn = false; tab = 0 }, onPlay = { playing = it })
+                            else -> ProfileScreen(vm, onLoggedOut = { loggedIn = false; tab = 0 },
+                                onPlay = { playing = it },
+                                onPlayWithCid = { v, cid, sec -> pendingCid = cid; pendingSeekSec = sec; playing = v },
+                                onPlayBookmark = { v, cid, sec -> pendingCid = cid; pendingSeekSec = sec; playing = v })
                         }
                     }
                 }
@@ -153,7 +175,10 @@ fun BiliLiteApp() {
                     Box(Modifier.padding(p)) {
                         when (tab) {
                             0 -> HomeScreen(vm, onPlay = { playing = it })
-                            else -> ProfileScreen(vm, onLoggedOut = { loggedIn = false; tab = 0 }, onPlay = { playing = it })
+                            else -> ProfileScreen(vm, onLoggedOut = { loggedIn = false; tab = 0 },
+                                onPlay = { playing = it },
+                                onPlayWithCid = { v, cid, sec -> pendingCid = cid; pendingSeekSec = sec; playing = v },
+                                onPlayBookmark = { v, cid, sec -> pendingCid = cid; pendingSeekSec = sec; playing = v })
                         }
                     }
                 }

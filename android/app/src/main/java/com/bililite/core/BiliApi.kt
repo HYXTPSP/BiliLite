@@ -233,7 +233,7 @@ class BiliApi(private val ctx: Context) {
     suspend fun videoView(bvid: String): JSONObject =
         get("https://api.bilibili.com/x/web-interface/view?bvid=$bvid")
 
-    /** 解析出可直接播放的 url。用 platform=html5&fnval=0 拿渐进式 mp4(durl),media3 可直接播。 */
+    /** 解析出可直接播放的 url。登录态下用 platform=html5&fnval=0 拿渐进式 mp4(durl),最高 1080p。 */
     suspend fun playUrl(bvid: String, cid: Long, qn: Int = 80): String {
         val j = get("https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$cid&qn=$qn&fnval=0&fnver=0&fourk=1&platform=html5")
         val d = j.optJSONObject("data") ?: return ""
@@ -241,16 +241,6 @@ class BiliApi(private val ctx: Context) {
         if (durl != null && durl.length() > 0) {
             val u = durl.optJSONObject(0).optString("url", "")
             if (u.isNotEmpty()) return u
-        }
-        // 兜底:dash 的 1080p 视频+音频(通常 .m4s,仅当 durl 不存在时)
-        val dash = d.optJSONObject("dash")
-        if (dash != null) {
-            val vids = dash.optJSONArray("video"); val auds = dash.optJSONArray("audio")
-            if (vids != null && vids.length() > 0 && auds != null && auds.length() > 0) {
-                val v = vids.optJSONObject(0).optString("baseUrl", "")
-                val a = auds.optJSONObject(0).optString("baseUrl", "")
-                if (v.isNotEmpty()) return "dash:$v|$a"
-            }
         }
         return ""
     }

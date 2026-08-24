@@ -89,6 +89,8 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         feedVids = v.shuffled()
         // 同步收藏列表
         favs = withContext(Dispatchers.IO) { db.videoDao().favorites() }
+        // 同步书签列表(持久化,App 启动即加载)
+        bookmarks = withContext(Dispatchers.IO) { db.bookmarkDao().all() }
     }
 
     /** 懒解析分P的 cid(播放前用),失败返回 0。 */
@@ -327,11 +329,11 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
     }
 
     // ---------- 播放历史 / 断点续播 ----------
-    /** 记录播放进度(secs=已播秒数,durSec=总时长秒数) */
-    fun recordProgress(videoId: Long, secs: Long, durSec: Int) {
+    /** 记录播放进度(secs=已播秒数,durSec=总时长秒数,cid=当前分P) */
+    fun recordProgress(videoId: Long, secs: Long, durSec: Int, cid: Long = 0) {
         viewModelScope.launch {
             val progress = if (durSec > 0) ((secs * 100) / durSec).toInt().coerceIn(0, 100) else 0
-            val w = Watch(videoId = videoId, progress = progress, secs = secs, startedAt = System.currentTimeMillis())
+            val w = Watch(videoId = videoId, cid = cid, progress = progress, secs = secs, startedAt = System.currentTimeMillis())
             withContext(Dispatchers.IO) { db.watchDao().upsert(w) }
             // 同步历史列表
             history = withContext(Dispatchers.IO) { db.watchDao().history() }
@@ -341,6 +343,10 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
     /** 取某视频上次进度(秒),无记录返回 0 */
     suspend fun lastPosition(videoId: Long): Long =
         withContext(Dispatchers.IO) { db.watchDao().get(videoId)?.secs ?: 0L }
+
+    /** 取某视频上次观看记录(含 cid + secs),无记录返回 null */
+    suspend fun lastWatch(videoId: Long): Watch? =
+        withContext(Dispatchers.IO) { db.watchDao().get(videoId) }
 
     /** 加载历史列表 */
     fun loadHistory() {
@@ -354,6 +360,42 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         viewModelScope.launch {
             withContext(Dispatchers.IO) { db.watchDao().clear() }
             history = emptyList()
+        }
+    }
+
+    // ---------- 视频书签 ----------
+    var bookmarks by mutableStateOf<List<Bookmark>>(emptyList()); private set
+
+    /** 加载全部书签 */
+    fun loadBookmarks() {
+        viewModelScope.launch {
+            bookmarks = withContext(Dispatchers.IO) { db.bookmarkDao().all() }
+        }
+    }
+
+    /** 打书签(返回新书签 id) */
+    fun addBookmark(bvid: String, videoTitle: String, cid: Long, pageIndex: Int, pageTitle: String, timeSec: Long) {
+        viewModelScope.launch {
+            val b = Bookmark(bvid = bvid, videoTitle = videoTitle, cid = cid,
+                pageIndex = pageIndex, pageTitle = pageTitle, timeSec = timeSec)
+            withContext(Dispatchers.IO) { db.bookmarkDao().upsert(b) }
+            bookmarks = withContext(Dispatchers.IO) { db.bookmarkDao().all() }
+        }
+    }
+
+    /** 重命名书签 */
+    fun renameBookmark(id: Long, note: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.bookmarkDao().rename(id, note) }
+            bookmarks = withContext(Dispatchers.IO) { db.bookmarkDao().all() }
+        }
+    }
+
+    /** 删除书签 */
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.bookmarkDao().delete(id) }
+            bookmarks = withContext(Dispatchers.IO) { db.bookmarkDao().all() }
         }
     }
 }
@@ -700,12 +742,13 @@ fun ReportScreen(vm: BiliViewModel) {
 
 
 @Composable
-fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {}, onPlay: (Video) -> Unit = {}) {
+fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {}, onPlay: (Video) -> Unit = {}, onPlayWithCid: (Video, Long, Long) -> Unit = { _, _, _ -> }, onPlayBookmark: (Video, Long, Long) -> Unit = { _, _, _ -> }) {
     val ctx = LocalContextSafe()
     var showManage by remember { mutableStateOf(false) }
     var showAccount by remember { mutableStateOf(false) }
     var showFavs by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showBookmarks by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
 
     if (showManage) {
@@ -721,7 +764,11 @@ fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {}, onPlay: (Vide
         return
     }
     if (showHistory) {
-        HistoryScreen(vm, onBack = { showHistory = false }, onPlay = onPlay)
+        HistoryScreen(vm, onBack = { showHistory = false }, onPlay = onPlay, onPlayWithCid = onPlayWithCid)
+        return
+    }
+    if (showBookmarks) {
+        BookmarkListScreen(vm, onBack = { showBookmarks = false }, onPlay = onPlay, onPlayBookmark = onPlayBookmark)
         return
     }
     if (showDisclaimer) {
@@ -764,6 +811,14 @@ fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {}, onPlay: (Vide
         OutlinedButton(onClick = { vm.loadHistory(); showHistory = true },
             modifier = Modifier.fillMaxWidth()) {
             Text("历史记录", color = Color(0xFF1C1C1E))
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // ---- 视频书签 入口 ----
+        OutlinedButton(onClick = { vm.loadBookmarks(); showBookmarks = true },
+            modifier = Modifier.fillMaxWidth()) {
+            Text("视频书签", color = Color(0xFF1C1C1E))
         }
 
         Spacer(Modifier.height(12.dp))
@@ -822,9 +877,72 @@ private fun FavoritesScreen(vm: BiliViewModel, onBack: () -> Unit, onPlay: (Vide
     }
 }
 
+/** 视频书签列表 */
+@Composable
+private fun BookmarkListScreen(vm: BiliViewModel, onBack: () -> Unit, onPlay: (Video) -> Unit, onPlayBookmark: (Video, Long, Long) -> Unit) {
+    val videoByBvid = remember(vm.vids) { vm.vids.associateBy { it.bvid } }
+    BackHandler { onBack() }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("← 返回", color = Color(0xFF1C1C1E)) }
+            Text("视频书签", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1C1C1E))
+        }
+        Spacer(Modifier.height(12.dp))
+        if (vm.bookmarks.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("暂无书签\n播放视频时点书签按钮标记", color = Color(0xFF8E8E93),
+                    fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            return@Column
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(vm.bookmarks) { b ->
+                var renaming by remember(b.id) { mutableStateOf(false) }
+                var note by remember(b.id) { mutableStateOf(b.note) }
+                val v = videoByBvid[b.bvid]
+                Card(colors = CardDefaults.cardColors(containerColor = BILICARD),
+                    onClick = {
+                        if (v != null) onPlayBookmark(v, b.cid, b.timeSec)
+                    },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        // 标题（颜色比备注浅）
+                        Text(b.videoTitle, color = Color(0xFF8E8E93), fontSize = 13.sp, maxLines = 2)
+                        Spacer(Modifier.height(6.dp))
+                        // 备注（黑体、字号更大、深黑，突出）
+                        if (b.note.isNotEmpty()) {
+                            Text(b.note, color = Color(0xFF1C1C1E), fontSize = 17.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 2)
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        // 分P + 时间点（次级信息）
+                        Text((if (b.pageTitle.isNotEmpty()) "${b.pageTitle} · " else "") +
+                             "@ ${b.timeSec / 60}:${(b.timeSec % 60).toString().padStart(2, '0')}",
+                             color = Color(0xFF8E8E93), fontSize = 12.sp)
+                        if (renaming) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(value = note, onValueChange = { note = it },
+                                    singleLine = true, modifier = Modifier.weight(1f),
+                                    label = { Text("备注") })
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { vm.renameBookmark(b.id, note); renaming = false }) { Text("确定", color = Color(0xFF1C1C1E)) }
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { renaming = true }) { Text("重命名", color = Color(0xFF8E8E93), fontSize = 12.sp) }
+                        TextButton(onClick = { vm.deleteBookmark(b.id) }) { Text("删除", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** 播放历史(带进度,点击续播) */
 @Composable
-private fun HistoryScreen(vm: BiliViewModel, onBack: () -> Unit, onPlay: (Video) -> Unit) {
+private fun HistoryScreen(vm: BiliViewModel, onBack: () -> Unit, onPlay: (Video) -> Unit, onPlayWithCid: (Video, Long, Long) -> Unit) {
     val upName = remember(vm.ups) { vm.ups.associate { it.id to it.name } }
     val videoById = remember(vm.vids) { vm.vids.associateBy { it.id } }
     BackHandler { onBack() }
@@ -848,7 +966,7 @@ private fun HistoryScreen(vm: BiliViewModel, onBack: () -> Unit, onPlay: (Video)
             items(vm.history) { w ->
                 val v = videoById[w.videoId]
                 Card(colors = CardDefaults.cardColors(containerColor = BILICARD),
-                    onClick = { v?.let { onPlay(it) } }) {
+                    onClick = { v?.let { onPlayWithCid(it, w.cid, w.secs) } }) {
                     Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (v != null && v.pic.isNotEmpty()) {
                             AsyncImage(model = v.pic, contentDescription = v.title,

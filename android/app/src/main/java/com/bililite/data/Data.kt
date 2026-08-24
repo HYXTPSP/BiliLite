@@ -6,6 +6,7 @@
 package com.bililite.data
 
 import androidx.room.*
+import androidx.room.migration.Migration
 
 @Entity(tableName = "upmain")
 data class Up(
@@ -37,6 +38,7 @@ data class Video(
 @Entity(tableName = "watch")
 data class Watch(
     @PrimaryKey val videoId: Long,
+    val cid: Long = 0,               // 分P标识(0=单P或P1)
     val mode: String = "deep",       // quick / deep
     var progress: Int = 0,           // 0-100
     var summary: String = "",        // 精读总结
@@ -50,6 +52,20 @@ data class QueueItem(
     @PrimaryKey val videoId: Long,
     val status: String = "todo",     // todo / done
     val addedAt: Long = System.currentTimeMillis()
+)
+
+/** 视频书签(三击/按钮打点) */
+@Entity(tableName = "bookmark")
+data class Bookmark(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val bvid: String,                // 视频 bvid
+    val videoTitle: String,          // 视频标题
+    val cid: Long = 0,               // 分P cid(0=单P)
+    val pageIndex: Int = 0,          // 分P序号(0 起)
+    val pageTitle: String = "",      // 分P标题
+    val timeSec: Long = 0,           // 时间点(秒)
+    val note: String = "",           // 备注(可重命名)
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 // 专注密码(6位): 生产应存 Android Keystore / 单向 hash
@@ -75,17 +91,41 @@ class Converters {
 
 @TypeConverters(Converters::class)
 @Database(
-    entities = [Up::class, Video::class, Watch::class, QueueItem::class], version = 6, exportSchema = false)
+    entities = [Up::class, Video::class, Watch::class, QueueItem::class, Bookmark::class], version = 8, exportSchema = false)
 abstract class BiliDb : RoomDatabase() {
     abstract fun upDao(): UpDao
     abstract fun videoDao(): VideoDao
     abstract fun watchDao(): WatchDao
     abstract fun queueDao(): QueueDao
+    abstract fun bookmarkDao(): BookmarkDao
 
     companion object {
         @Volatile private var I: BiliDb? = null
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `bookmark` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `bvid` TEXT NOT NULL,
+                        `videoTitle` TEXT NOT NULL,
+                        `cid` INTEGER NOT NULL DEFAULT 0,
+                        `pageIndex` INTEGER NOT NULL DEFAULT 0,
+                        `pageTitle` TEXT NOT NULL DEFAULT '',
+                        `timeSec` INTEGER NOT NULL DEFAULT 0,
+                        `note` TEXT NOT NULL DEFAULT '',
+                        `createdAt` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `watch` ADD COLUMN `cid` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
         fun get(c: android.content.Context): BiliDb = I ?: synchronized(this) {
             I ?: Room.databaseBuilder(c.applicationContext, BiliDb::class.java, "bililite.db")
+                .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .build().also { I = it }
         }
@@ -116,4 +156,11 @@ abstract class BiliDb : RoomDatabase() {
     @Query("SELECT * FROM queue_item ORDER BY addedAt") suspend fun all(): List<QueueItem>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(q: QueueItem)
     @Query("DELETE FROM queue_item WHERE videoId=:id") suspend fun delete(id: Long)
+}
+@Dao interface BookmarkDao {
+    @Query("SELECT * FROM bookmark ORDER BY createdAt DESC") suspend fun all(): List<Bookmark>
+    @Query("SELECT * FROM bookmark WHERE bvid=:bvid ORDER BY timeSec ASC") suspend fun byBvid(bvid: String): List<Bookmark>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(b: Bookmark)
+    @Query("UPDATE bookmark SET note=:note WHERE id=:id") suspend fun rename(id: Long, note: String)
+    @Query("DELETE FROM bookmark WHERE id=:id") suspend fun delete(id: Long)
 }
