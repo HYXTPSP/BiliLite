@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 深色模式尺寸资源
+  深色模式下尺寸与浅色一致（颜色由 colors.xml 的 values-night 覆盖），
+  本文件保留关键字号占位，确保四规格资源目录完整、语义清晰。
+-->
+<resources>
+    <dimen name="text_display">24sp</dimen>
+    <dimen name="text_title">17sp</dimen>
+    <dimen name="text_body">15sp</dimen>
+    <dimen name="text_subtitle">14sp</dimen>
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_small">11sp</dimen>
+
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>
+    <dimen name="space_xl">24dp</dimen>
+    <dimen name="space_xxl">32dp</dimen>
+
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <dimen name="size_icon_sm">16dp</dimen>
+    <dimen name="size_icon_md">22dp</dimen>
+    <dimen name="size_icon_lg">28dp</dimen>
+    <dimen name="size_avatar">36dp</dimen>
+    <dimen name="size_cover_h">68dp</dimen>
+</resources>

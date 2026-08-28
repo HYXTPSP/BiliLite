@@ -1,0 +1,11 @@
+{
+  "id": "com.bililite.feature.subtitle_size",
+  "name": "字幕大小调节",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "feature",
+  "author": "BiliLite",
+  "description": "通过对话框调整播放器字幕字体大小（小/中/大）。",
+  "permissions": ["ui", "system"],
+  "entry": "main.lua"
+}

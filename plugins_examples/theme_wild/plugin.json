@@ -1,0 +1,26 @@
+{
+  "id": "com.bililite.theme.wild",
+  "name": "原野主题插件",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "theme",
+  "author": "BiliLite",
+  "description": "原野主题：绿色护眼色调 + 半透明卡片 + 手机/平板双背景图。",
+  "permissions": ["ui"],
+  "theme": {
+    "bg": "#1E2B22",
+    "card": "#D9213A2E",
+    "t1": "#F2F8F0",
+    "t2": "#B5C9AE",
+    "t3": "#D5E4CE",
+    "line": "#447CA46B",
+    "block": "#7BC96F",
+    "soft": "#66233429",
+    "onBlock": "#0B2119",
+    "inputBg": "#66233429",
+    "primary": "#7BC96F",
+    "radius": 16,
+    "backgroundImage": "phone_bg.jpg",
+    "backgroundImageTablet": "tablet_bg.jpg"
+  }
+}

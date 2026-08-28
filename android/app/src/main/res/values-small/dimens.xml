@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 小屏尺寸资源（适配窄屏，如宽度 < 360dp）
+  收窄间距与部分字号，避免内容拥挤。
+-->
+<resources>
+    <dimen name="text_display">22sp</dimen>
+    <dimen name="text_title">16sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_subtitle">13sp</dimen>
+    <dimen name="text_caption">12sp</dimen>
+    <dimen name="text_small">10sp</dimen>
+
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">10dp</dimen>
+    <dimen name="space_lg">12dp</dimen>
+    <dimen name="space_xl">18dp</dimen>
+    <dimen name="space_xxl">24dp</dimen>
+
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <dimen name="size_icon_sm">16dp</dimen>
+    <dimen name="size_icon_md">20dp</dimen>
+    <dimen name="size_icon_lg">26dp</dimen>
+    <dimen name="size_avatar">32dp</dimen>
+    <dimen name="size_cover_h">60dp</dimen>
+</resources>

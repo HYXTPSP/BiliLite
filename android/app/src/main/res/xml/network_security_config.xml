@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 网络安全配置(v0.4.17 安全加固)
+  默认禁止明文 HTTP;仅 B 站官方域名(部分 CDN 下发 http 播放地址)允许明文,
+  防止第三方/劫持域名的明文传输。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">bilibili.com</domain>
+        <domain includeSubdomains="true">bilibili.cn</domain>
+        <domain includeSubdomains="true">hdslb.com</domain>
+        <domain includeSubdomains="true">bilivideo.com</domain>
+        <domain includeSubdomains="true">biliapi.net</domain>
+        <domain includeSubdomains="true">acgvideo.com</domain>
+        <domain includeSubdomains="true">bvcache.com</domain>
+        <domain includeSubdomains="true">akamaized.net</domain>
+    </domain-config>
+</network-security-config>

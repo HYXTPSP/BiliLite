@@ -1,0 +1,11 @@
+{
+  "id": "com.bililite.feature.autoskip",
+  "name": "自动跳过片头",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "type": "feature",
+  "author": "BiliLite",
+  "description": "示例功能插件：播放时自动向前跳过片头(默认 90 秒)，可在插件设置里自定义秒数。演示 player/events/system API 协同。",
+  "permissions": ["player", "events", "system"],
+  "entry": "main.lua"
+}

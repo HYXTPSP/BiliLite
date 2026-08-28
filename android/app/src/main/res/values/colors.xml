@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 浅色主题颜色 token（Material Design 3 中性色为主 + 克制主色）
+  中性色用于背景/卡片/文字/分割线，主色仅用于关键操作与选中态。
+-->
+<resources>
+    <!-- 中性色（Neutral） -->
+    <color name="color_neutral_0">#FFFFFF</color>     <!-- surface / 卡片 -->
+    <color name="color_neutral_50">#FAFAFA</color>    <!-- background / 页面背景 -->
+    <color name="color_neutral_100">#F2F2F7</color>   <!-- surfaceVariant / 浅灰块 -->
+    <color name="color_neutral_200">#E0E0E4</color>   <!-- 分割线 / 占位 -->
+    <color name="color_neutral_300">#D1D1D6</color>   <!-- outline / 边框 -->
+    <color name="color_neutral_600">#5F6368</color>   <!-- onSurfaceVariant / 次文字(≥4.5:1) -->
+    <color name="color_neutral_700">#3A3A3C</color>   <!-- 正文 -->
+    <color name="color_neutral_900">#1A1A1E</color>   <!-- onSurface / 主文字 -->
+
+    <!-- 主色（Primary，仅关键操作/选中态） -->
+    <color name="color_primary">#2F6BFF</color>
+    <color name="color_on_primary">#FFFFFF</color>
+    <color name="color_primary_container">#DCE6FF</color>
+    <color name="color_on_primary_container">#0A2E7A</color>
+
+    <!-- 已看徽章 -->
+    <color name="color_watched_bg">#E6F4EA</color>
+    <color name="color_watched_fg">#1E8E3E</color>
+
+    <!-- 强调/警示 -->
+    <color name="color_error">#D93025</color>
+    <color name="color_warn">#FFB300</color>
+</resources>

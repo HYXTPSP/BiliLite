@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 基础尺寸资源（基准规格，默认手机）
+  字号用 sp（跟随系统字体缩放，不锁定大小）；间距/圆角/图标用 dp。
+  遵循 8dp 网格系统；圆角统一 8/12/16dp 三档。
+-->
+<resources>
+    <!-- ========== 字号（sp，标题/正文/辅助三级层次） ========== -->
+    <dimen name="text_display">24sp</dimen>   <!-- 大标题（用户名/页头） -->
+    <dimen name="text_title">17sp</dimen>     <!-- 标题 -->
+    <dimen name="text_body">15sp</dimen>      <!-- 正文 -->
+    <dimen name="text_subtitle">14sp</dimen>  <!-- 次级正文/列表标题 -->
+    <dimen name="text_caption">12sp</dimen>   <!-- 辅助说明 -->
+    <dimen name="text_small">11sp</dimen>     <!-- 次要标签 -->
+
+    <!-- ========== 间距（dp，8dp 网格） ========== -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>       <!-- 默认页面/卡片内边距 -->
+    <dimen name="space_xl">24dp</dimen>       <!-- 区块间距 -->
+    <dimen name="space_xxl">32dp</dimen>      <!-- 大区块间距 -->
+
+    <!-- ========== 圆角（dp，8/12/16 三档） ========== -->
+    <dimen name="radius_sm">8dp</dimen>       <!-- 小组件/缩略图 -->
+    <dimen name="radius_md">12dp</dimen>      <!-- 输入框/按钮 -->
+    <dimen name="radius_lg">16dp</dimen>      <!-- 卡片/弹窗 -->
+
+    <!-- ========== 固定尺寸（图标/头像/分割线） ========== -->
+    <dimen name="size_icon_sm">16dp</dimen>
+    <dimen name="size_icon_md">22dp</dimen>
+    <dimen name="size_icon_lg">28dp</dimen>
+    <dimen name="size_avatar">36dp</dimen>
+    <dimen name="size_cover_h">68dp</dimen>   <!-- 列表封面高度 -->
+</resources>

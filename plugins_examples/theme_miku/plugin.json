@@ -1,0 +1,26 @@
+{
+  "id": "com.bililite.theme.miku",
+  "name": "初音主题插件",
+  "version": "1.0.1",
+  "apiVersion": 1,
+  "type": "theme",
+  "author": "BiliLite",
+  "description": "初音未来主题：蓝色调 + 毛玻璃半透明卡片 + 手机/平板双背景图。",
+  "permissions": ["ui"],
+  "theme": {
+    "bg": "#1F2A44",
+    "card": "#D91F2A44",
+    "t1": "#FFFFFF",
+    "t2": "#C0D0E8",
+    "t3": "#D8E2F0",
+    "line": "#446A8FB0",
+    "block": "#39C5BB",
+    "soft": "#66202640",
+    "onBlock": "#08211F",
+    "inputBg": "#66202640",
+    "primary": "#39C5BB",
+    "radius": 16,
+    "backgroundImage": "phone_bg.jpg",
+    "backgroundImageTablet": "tablet_bg.jpg"
+  }
+}

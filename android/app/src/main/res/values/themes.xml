@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BiliLite 浅色主题：窗口/系统栏背景统一走 colors.xml 中性色 token -->
+<resources>
+    <style name="Theme.BiliLite" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/color_neutral_50</item>
+        <item name="android:statusBarColor">@color/color_neutral_50</item>
+        <item name="android:navigationBarColor">@color/color_neutral_50</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

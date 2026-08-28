@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliLite 大屏/平板尺寸资源（适配平板与横屏，sw >= 600dp）
+  增大间距与部分字号，利用宽屏空间，避免元素过密。
+-->
+<resources>
+    <dimen name="text_display">28sp</dimen>
+    <dimen name="text_title">19sp</dimen>
+    <dimen name="text_body">16sp</dimen>
+    <dimen name="text_subtitle">15sp</dimen>
+    <dimen name="text_caption">13sp</dimen>
+    <dimen name="text_small">12sp</dimen>
+
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">14dp</dimen>
+    <dimen name="space_lg">20dp</dimen>
+    <dimen name="space_xl">28dp</dimen>
+    <dimen name="space_xxl">40dp</dimen>
+
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <dimen name="size_icon_sm">18dp</dimen>
+    <dimen name="size_icon_md">24dp</dimen>
+    <dimen name="size_icon_lg">32dp</dimen>
+    <dimen name="size_avatar">44dp</dimen>
+    <dimen name="size_cover_h">88dp</dimen>
+</resources>
