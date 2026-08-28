@@ -72,8 +72,8 @@ BiliLite 是一款用极简风格设计的,专注于学习的学习版 B 站,从
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/plugin_theme_miku.jpg" width="220"><br><b>Miku主题插件</b><br>初音未来风格主题</td>
-    <td align="center"><img src="docs/screenshots/plugin_theme_wild.jpg" width="220"><br><b>原野主题插件</b><br>自然原野风格主题</td>
+    <td align="center"><img src="docs/screenshots/plugin_theme_miku.jpg" width="420"><br><b>Miku主题插件</b><br>初音未来风格主题</td>
+    <td align="center"><img src="docs/screenshots/plugin_theme_wild.jpg" width="420"><br><b>原野主题插件</b><br>自然原野风格主题</td>
   </tr>
 </table>
 
