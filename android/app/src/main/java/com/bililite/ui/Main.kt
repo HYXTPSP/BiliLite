@@ -237,10 +237,11 @@ private fun BiliAppContent() {
                 onAddBookmark = { bvid, t, cid, idx, pt, ts -> vm.addBookmark(bvid, t, cid, idx, pt, ts) },
                 onRenameBookmark = { id, note -> vm.renameBookmark(id, note) },
                 onDeleteBookmark = { id -> vm.deleteBookmark(id) },
-                // v0.4.1: 离线缓存。这里 cid 必须用「实际正在播放的分P」，
-                // 否则缓存了某P后,在收藏里切到其他P仍会命中那个缓存文件(精确匹配)。
+                // v0.4.1: 离线缓存。这里传 resolver 让播放器随当前分P动态查缓存,
+                // 修复"合集中缓存了某P,其它P也显示已缓存"的 bug。
                 localPath = vm.cachedPath(v.bvid, pendingCid ?: v.cid),
-                onCache = { qn -> vm.cacheVideo(v, pendingCid ?: v.cid, qn) },
+                cachedPathResolver = { ccid -> vm.cachedPath(v.bvid, ccid) },
+                onCache = { qn, cid -> vm.cacheVideo(v, cid, qn) },
                 caching = vm.caching,
                 cacheMsg = vm.cacheMsg)
         }

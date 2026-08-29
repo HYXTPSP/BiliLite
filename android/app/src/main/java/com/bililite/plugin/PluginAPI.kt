@@ -1,5 +1,6 @@
 package com.bililite.plugin
 
+import android.content.Context
 import android.widget.Toast
 import android.app.AlertDialog
 import androidx.compose.ui.graphics.Color
@@ -26,6 +27,10 @@ object PluginAPI {
         sandbox.setModule("ui", buildUiTable(info, sandbox))
         sandbox.setModule("system", buildSystemTable(info, sandbox))
         sandbox.setModule("events", buildEventsTable(info))
+        // v0.4.20: 跨插件共享存储/通信 + 定时任务
+        sandbox.setModule("storage", buildStorageTable(info))
+        sandbox.setModule("plugin", buildPluginTable(info))
+        sandbox.setModule("timer", buildTimerTable(info))
     }
 
     /** 注入阶段5 的 API 表(player/data/network)。 */
@@ -81,6 +86,88 @@ object PluginAPI {
                 i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 PluginRuntime.appContext?.startActivity(i)
             } catch (_: Exception) {}
+            LuaValue.NIL
+        })
+        // ui.dialog(title, message, buttons) —— buttons 为 {label = callback}
+        t.set("dialog", KtFunc { args ->
+            if (!info.hasPermission("ui")) return@KtFunc LuaValue.NIL
+            val title = args.optjstring(1, "")
+            val message = args.optjstring(2, "")
+            val buttonsTable = args.arg(3)
+            if (!buttonsTable.istable()) return@KtFunc LuaValue.NIL
+            val bt = buttonsTable.checktable()
+            val labels = mutableListOf<String>()
+            val callbacks = mutableListOf<LuaFunction>()
+            var k: LuaValue = LuaValue.NIL
+            while (true) {
+                val n = bt.next(k)
+                val key = n.arg1()
+                if (key.isnil()) break
+                val v = n.arg(2)
+                if (v is LuaFunction) { labels.add(key.tojstring()); callbacks.add(v) }
+                k = key
+            }
+            PluginRuntime.uiHandler?.post {
+                val c = PluginRuntime.appContext ?: return@post
+                val b = AlertDialog.Builder(c).setTitle(title).setMessage(message)
+                labels.forEachIndexed { i, lb -> b.setPositiveButton(lb) { _, _ -> try { callbacks[i].call() } catch (_: Exception) {} } }
+                b.setNegativeButton("取消", null).show()
+            }
+            LuaValue.NIL
+        })
+        // ui.showInput(title, hint, callback(text)) —— 文本输入弹窗
+        t.set("showInput", KtFunc { args ->
+            if (!info.hasPermission("ui")) return@KtFunc LuaValue.NIL
+            val title = args.optjstring(1, "")
+            val hint = args.optjstring(2, "")
+            val cb = args.arg(3)
+            if (cb !is LuaFunction) return@KtFunc LuaValue.NIL
+            PluginRuntime.uiHandler?.post {
+                val c = PluginRuntime.appContext ?: return@post
+                val input = android.widget.EditText(c).apply { this.hint = hint }
+                AlertDialog.Builder(c).setTitle(title).setView(input)
+                    .setPositiveButton("确定") { _, _ -> try { cb.call(LuaValue.valueOf(input.text.toString())) } catch (_: Exception) {} }
+                    .setNegativeButton("取消", null).show()
+            }
+            LuaValue.NIL
+        })
+        // ui.showList(title, itemsTable, callback(selectedText)) —— 列表选择弹窗
+        t.set("showList", KtFunc { args ->
+            if (!info.hasPermission("ui")) return@KtFunc LuaValue.NIL
+            val title = args.optjstring(1, "")
+            val itemsTable = args.arg(2)
+            val cb = args.arg(3)
+            if (!itemsTable.istable() || cb !is LuaFunction) return@KtFunc LuaValue.NIL
+            val it = itemsTable.checktable()
+            val items = mutableListOf<String>()
+            var j = 0
+            while (true) {
+                val v = it.get(j + 1)
+                if (v.isnil()) break
+                items.add(v.tojstring()); j++
+            }
+            PluginRuntime.uiHandler?.post {
+                val c = PluginRuntime.appContext ?: return@post
+                AlertDialog.Builder(c).setTitle(title)
+                    .setItems(items.toTypedArray()) { _, idx -> try { cb.call(LuaValue.valueOf(items[idx])) } catch (_: Exception) {} }
+                    .setNegativeButton("取消", null).show()
+            }
+            LuaValue.NIL
+        })
+        // ui.registerMenu(id, label, handler) —— 在「我的」页注册自定义入口
+        t.set("registerMenu", KtFunc { args ->
+            if (!info.hasPermission("ui")) return@KtFunc LuaValue.NIL
+            val id = args.optjstring(1, "")
+            val label = args.optjstring(2, "")
+            val cb = args.arg(3)
+            if (id.isNotEmpty() && label.isNotEmpty() && cb is LuaFunction) {
+                PluginMenus.register(info.id, id, label, cb)
+            }
+            LuaValue.NIL
+        })
+        // ui.unregisterMenu(id)
+        t.set("unregisterMenu", KtFunc { args ->
+            PluginMenus.unregister(args.optjstring(1, ""))
             LuaValue.NIL
         })
         return t
@@ -141,6 +228,76 @@ object PluginAPI {
             try { f?.parentFile?.mkdirs(); f?.writeText(content) } catch (_: Exception) {}
             LuaValue.NIL
         })
+        // system.listFiles() → table(插件目录内文件名列表)
+        t.set("listFiles", KtFunc {
+            val lt = LuaTable()
+            val dir = PluginRuntime.appContext?.let { com.bililite.plugin.PluginManager.get(it).pluginDir(info.id) }
+            dir?.listFiles()?.forEachIndexed { i, f -> if (f.isFile) lt.set(i + 1, LuaValue.valueOf(f.name)) }
+            lt
+        })
+        // system.deleteFile(name)(限插件目录)
+        t.set("deleteFile", KtFunc { args ->
+            if (!info.hasPermission("system.file")) return@KtFunc LuaValue.NIL
+            val name = args.optjstring(1, "")
+            val dir = PluginRuntime.appContext?.let { com.bililite.plugin.PluginManager.get(it).pluginDir(info.id) }
+            val f = dir?.let { safeChild(it, name) }
+            try { f?.delete() } catch (_: Exception) {}
+            LuaValue.NIL
+        })
+        // system.setBrightness(0~1) —— 当前窗口亮度
+        t.set("setBrightness", KtFunc { args ->
+            val v = args.optdouble(1, 1.0).toFloat().coerceIn(0.01f, 1f)
+            PluginRuntime.uiHandler?.post {
+                val act = PluginRuntime.appContext?.let { (it as? android.app.Activity) }
+                act?.window?.apply { val lp = attributes; lp.screenBrightness = v; attributes = lp }
+            }
+            LuaValue.NIL
+        })
+        // system.setVolume(0~1) —— 媒体音量
+        t.set("setVolume", KtFunc { args ->
+            val v = args.optdouble(1, 1.0).toFloat().coerceIn(0f, 1f)
+            PluginRuntime.appContext?.let { c ->
+                val am = c.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, (v * max).toInt().coerceIn(0, max), 0)
+            }
+            LuaValue.NIL
+        })
+        // system.getClipboard() → string / system.setClipboard(text)
+        t.set("getClipboard", KtFunc {
+            var out = ""
+            PluginRuntime.appContext?.let { c ->
+                try { out = c.getSystemService(Context.CLIPBOARD_SERVICE).let { sm -> (sm as android.content.ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString() ?: "" } } catch (_: Exception) {}
+            }
+            LuaValue.valueOf(out)
+        })
+        t.set("setClipboard", KtFunc { args ->
+            val text = args.optjstring(1, "")
+            PluginRuntime.appContext?.let { c ->
+                try { (c.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("plugin", text)) } catch (_: Exception) {}
+            }
+            LuaValue.NIL
+        })
+        // system.vibrate(ms)
+        t.set("vibrate", KtFunc { args ->
+            val ms = args.optjstring(1, "100").toLongOrNull() ?: 100L
+            PluginRuntime.appContext?.let { c ->
+                try { (c.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator).vibrate(ms) } catch (_: Exception) {}
+            }
+            LuaValue.NIL
+        })
+        // system.share(text)
+        t.set("share", KtFunc { args ->
+            val text = args.optjstring(1, "")
+            PluginRuntime.appContext?.let { c ->
+                val i = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, text)
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try { c.startActivity(android.content.Intent.createChooser(i, "分享")) } catch (_: Exception) {}
+            }
+            LuaValue.NIL
+        })
         return t
     }
 
@@ -172,6 +329,59 @@ object PluginAPI {
             val event = args.optjstring(1, "")
             // 简版:移除该事件下所有由本插件注册的监听
             // (完整实现需按 callback 精确匹配,阶段3 先提供事件名级 off)
+            LuaValue.NIL
+        })
+        return t
+    }
+
+    // ---------- storage.* (跨插件共享 KV) ----------
+
+    private fun buildStorageTable(info: PluginInfo): LuaTable {
+        val t = LuaTable()
+        t.set("get", KtFunc { args -> LuaValue.valueOf(PluginShared.get(args.optjstring(1, ""))) })
+        t.set("set", KtFunc { args -> PluginShared.set(args.optjstring(1, ""), args.optjstring(2, "")); LuaValue.NIL })
+        return t
+    }
+
+    // ---------- plugin.* (跨插件通信) ----------
+
+    private fun buildPluginTable(info: PluginInfo): LuaTable {
+        val t = LuaTable()
+        // plugin.export(name, fn) —— 导出函数供其它插件调用
+        t.set("export", KtFunc { args ->
+            val name = args.optjstring(1, "")
+            val fn = args.arg(2)
+            if (name.isNotEmpty() && fn is LuaFunction) PluginShared.registerExport(info.id, name, fn)
+            LuaValue.NIL
+        })
+        // plugin.call(pluginId, name) → 调用其它插件导出的函数,返回其返回值
+        t.set("call", KtFunc { args ->
+            val pid = args.optjstring(1, "")
+            val name = args.optjstring(2, "")
+            val fn = PluginShared.callExport(pid, name)
+            if (fn != null) { try { fn.call() } catch (_: Exception) {} }
+            LuaValue.NIL
+        })
+        return t
+    }
+
+    // ---------- timer.* (定时任务) ----------
+
+    private fun buildTimerTable(info: PluginInfo): LuaTable {
+        val t = LuaTable()
+        // timer.schedule(delayMs, repeatMs, callback) —— repeatMs<=0 表示只执行一次
+        t.set("schedule", KtFunc { args ->
+            val delay = args.optjstring(1, "0").toLongOrNull() ?: 0L
+            val repeat = args.optjstring(2, "0").toLongOrNull() ?: 0L
+            val cb = args.arg(3)
+            if (cb is LuaFunction) {
+                val timer = java.util.Timer(true)
+                val task = object : java.util.TimerTask() {
+                    override fun run() { try { cb.call() } catch (_: Exception) {} }
+                }
+                if (repeat > 0) timer.schedule(task, delay, repeat)
+                else timer.schedule(task, delay)
+            }
             LuaValue.NIL
         })
         return t
@@ -212,6 +422,48 @@ object PluginAPI {
             val lt = LuaTable()
             PlayerBridge.currentVideo.forEach { (k, v) -> lt.set(k, PluginSandbox.luaValueOf(v)) }
             lt
+        })
+        // player.getState() → string(playing/paused/buffering/ended/idle)
+        t.set("getState", KtFunc {
+            val st = p()?.playbackState ?: androidx.media3.common.Player.STATE_IDLE
+            val s = when (st) {
+                androidx.media3.common.Player.STATE_READY -> if (p()?.isPlaying == true) "playing" else "paused"
+                androidx.media3.common.Player.STATE_BUFFERING -> "buffering"
+                androidx.media3.common.Player.STATE_ENDED -> "ended"
+                else -> "idle"
+            }
+            LuaValue.valueOf(s)
+        })
+        // player.getBufferedPercent() → 0~100
+        t.set("getBufferedPercent", KtFunc {
+            val d = p()?.duration ?: 0L
+            val b = p()?.bufferedPosition ?: 0L
+            LuaValue.valueOf(if (d > 0) (b.toDouble() / d * 100).coerceIn(0.0, 100.0) else 0.0)
+        })
+        // player.setVolume(0~1)
+        t.set("setVolume", KtFunc { args ->
+            val v = args.optdouble(1, 1.0).toFloat().coerceIn(0f, 1f)
+            p()?.volume = v
+            LuaValue.NIL
+        })
+        // player.getVolume() → 0~1
+        t.set("getVolume", KtFunc { LuaValue.valueOf((p()?.volume ?: 1f).toDouble()) })
+        // player.setLoop(true/false) —— 单集循环(Media3 repeatMode)
+        t.set("setLoop", KtFunc { args ->
+            val on = args.optboolean(1, false)
+            p()?.repeatMode = if (on) androidx.media3.common.Player.REPEAT_MODE_ONE
+                              else androidx.media3.common.Player.REPEAT_MODE_OFF
+            LuaValue.NIL
+        })
+        // player.next() / player.prev() —— 通过事件触发上层连播/上一集(尽力而为)
+        t.set("next", KtFunc { PlayerBridge.notifyComplete(); LuaValue.NIL })
+        t.set("prev", KtFunc { LuaValue.NIL })  // 需上层支持,暂空
+        // player.enableBackground(true/false) —— 后台播放开关
+        t.set("enableBackground", KtFunc { args ->
+            val on = args.optboolean(1, false)
+            PluginRuntime.appContext?.getSharedPreferences("bililite_pref", Context.MODE_PRIVATE)
+                ?.edit()?.putBoolean("background_play", on)?.apply()
+            LuaValue.NIL
         })
         // player.on(event, callback) —— 转发到 EventBus
         t.set("on", KtFunc { args ->
@@ -311,6 +563,57 @@ object PluginAPI {
             }
             lt
         })
+        // data.clearHistory()
+        t.set("clearHistory", KtFunc { PluginRuntime.vm?.clearHistory(); LuaValue.NIL })
+        // data.addBookmark(bvid, title, timeSec)
+        t.set("addBookmark", KtFunc { args ->
+            val bvid = args.optjstring(1, "")
+            val title = args.optjstring(2, "")
+            val sec = args.optjstring(3, "0").toLongOrNull() ?: 0L
+            if (bvid.isNotEmpty()) PluginRuntime.vm?.addBookmark(bvid, title, 0L, 0, "", sec)
+            LuaValue.NIL
+        })
+        // data.removeBookmark(bvid)
+        t.set("removeBookmark", KtFunc { args ->
+            val bvid = args.optjstring(1, "")
+            PluginRuntime.vm?.bookmarks?.filter { it.bvid == bvid }?.forEach { b ->
+                PluginRuntime.vm?.deleteBookmark(b.id)
+            }
+            LuaValue.NIL
+        })
+        // data.addUp(mid, name)
+        t.set("addUp", KtFunc { args ->
+            val mid = args.optjstring(1, "")
+            val name = args.optjstring(2, "")
+            if (mid.isNotEmpty()) PluginRuntime.vm?.addUpAndSync(com.bililite.data.Up(id = mid, name = name.ifBlank { mid }))
+            LuaValue.NIL
+        })
+        // data.removeUp(mid)
+        t.set("removeUp", KtFunc { args ->
+            val mid = args.optjstring(1, "")
+            if (mid.isNotEmpty()) PluginRuntime.vm?.removeUp(mid)
+            LuaValue.NIL
+        })
+        // data.setWatched(videoId, watched)
+        t.set("setWatched", KtFunc { args ->
+            val id = args.optjstring(1, "0").toLongOrNull() ?: 0L
+            val w = args.optboolean(2, true)
+            if (id != 0L) PluginRuntime.vm?.setWatched(id, w)
+            LuaValue.NIL
+        })
+        // data.getUpVideos(mid) → table
+        t.set("getUpVideos", KtFunc { args ->
+            val mid = args.optjstring(1, "")
+            val lt = LuaTable()
+            PluginRuntime.vm?.vids?.filter { it.upId == mid }?.forEachIndexed { i, v ->
+                val iv = LuaTable()
+                iv.set("bvid", LuaValue.valueOf(v.bvid))
+                iv.set("title", LuaValue.valueOf(v.title))
+                iv.set("upId", LuaValue.valueOf(v.upId))
+                lt.set(i + 1, iv)
+            }
+            lt
+        })
         return t
     }
 
@@ -347,12 +650,31 @@ object PluginAPI {
             val result = runNetwork(sb.toString())
             result as? LuaValue ?: LuaValue.NIL
         })
+        // network.post(url, paramsTable) → table(POST x-www-form-urlencoded,带登录态)
+        t.set("post", KtFunc { args ->
+            val url = args.optjstring(1, "")
+            val params = args.arg(2)
+            val fields = HashMap<String, String>()
+            if (params.istable()) {
+                val pt = params.checktable()
+                var k: LuaValue = LuaValue.NIL
+                while (true) {
+                    val n = pt.next(k)
+                    val nk = n.arg1()
+                    if (nk.isnil()) break
+                    fields[nk.tojstring()] = n.arg(2).tojstring()
+                    k = nk
+                }
+            }
+            runNetworkPost(url, fields) as? LuaValue ?: LuaValue.NIL
+        })
         return t
     }
 
-    /** 网络请求(带登录态),返回解析后的 Lua 表。失败返回 NIL。 */
+    /** 网络请求(带登录态),返回解析后的 Lua 表。失败返回 null。仅限 https + bilibili 域名白名单。 */
     private fun runNetwork(url: String): LuaValue? {
         if (!url.startsWith("https://")) return null
+        if (!isAllowedHost(url)) return null
         return try {
             val vm = PluginRuntime.vm ?: return null
             // 插件网络请求:同步阻塞等待(低频操作)。IO 后台执行,避免主线程直接做网络。
@@ -361,6 +683,26 @@ object PluginAPI {
             }
             jsonToLua(j)
         } catch (_: Exception) { null }
+    }
+
+    /** POST 请求(带登录态),返回解析后的 Lua 表。失败返回 null。 */
+    private fun runNetworkPost(url: String, fields: Map<String, String>): LuaValue? {
+        if (!url.startsWith("https://") || !isAllowedHost(url)) return null
+        return try {
+            val vm = PluginRuntime.vm ?: return null
+            val j = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                vm.api.publicPost(url, fields)
+            }
+            jsonToLua(j)
+        } catch (_: Exception) { null }
+    }
+
+    /** 域名白名单:仅允许 bilibili.com 及其子域。 */
+    private fun isAllowedHost(url: String): Boolean {
+        return try {
+            val host = java.net.URI(url).host ?: return false
+            host == "bilibili.com" || host.endsWith(".bilibili.com") || host.endsWith(".bilibili.com/")
+        } catch (_: Exception) { false }
     }
 
     /** org.json JSONObject → LuaTable(递归转换) */

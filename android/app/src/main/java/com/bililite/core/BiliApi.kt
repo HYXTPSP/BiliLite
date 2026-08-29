@@ -597,4 +597,26 @@ class BiliApi(private val ctx: Context) {
     suspend fun publicGet(url: String): JSONObject =
         if (url.startsWith("https://")) get(url, space = false)
         else throw Exception("仅支持 https 请求")
+
+    /** 插件 system/network 用:通用 POST x-www-form-urlencoded(带登录态)。 */
+    suspend fun publicPost(url: String, fields: Map<String, String>): JSONObject =
+        withContext(Dispatchers.IO) {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setRequestProperty("User-Agent", UA)
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            conn.setRequestProperty("Referer", "https://www.bilibili.com/")
+            conn.setRequestProperty("Origin", "https://www.bilibili.com")
+            val fc = fullCookie()
+            if (fc.isNotEmpty()) conn.setRequestProperty("Cookie", fc)
+            conn.connectTimeout = 10000; conn.readTimeout = 15000
+            val body = fields.entries.joinToString("&") { (k, v) ->
+                URLEncoder.encode(k, "UTF-8") + "=" + URLEncoder.encode(v, "UTF-8")
+            }
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            val resp = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            try { conn.disconnect() } catch (_: Exception) {}
+            resp
+        }
 }

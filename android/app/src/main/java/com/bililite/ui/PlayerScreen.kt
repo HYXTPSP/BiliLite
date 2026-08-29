@@ -132,7 +132,10 @@ fun PlayerScreen(
     playlist: List<com.bililite.data.Video> = emptyList(),
     onEnded: () -> Unit = {},
     localPath: String? = null,
-    onCache: ((Int) -> Unit)? = null,
+    // v0.4.20: 按当前分P cid 查缓存的函数。用于修复"合集中缓存了某P,其它P也显示已缓存"——
+    // localPath 是进入视频时算的一次性值,切分P后不会更新;改用 resolver 随 curCid 动态查。
+    cachedPathResolver: ((Long) -> String?)? = null,
+    onCache: ((Int, Long) -> Unit)? = null,
     caching: Boolean = false,
     cacheMsg: String = ""
 ) {
@@ -141,6 +144,10 @@ fun PlayerScreen(
     // 标题更新了但播放器仍持有旧的 bvid/cid(视频不切换、退出重进卡死)。
     var pages by remember(bvid) { mutableStateOf<List<PageInfo>>(emptyList()) }
     var curCid by remember(bvid) { mutableStateOf(cid) }
+    // v0.4.20: 当前分P是否已缓存(随 curCid 动态);有 resolver 时以它为准,否则退回外部传入的 localPath
+    val effectiveLocalPath = if (cachedPathResolver != null) {
+        cachedPathResolver(curCid)
+    } else localPath
     // v0.4.20 修复:断点续播只对「首次进入的那个分P」生效。切到其他分P时,
     // initialSec 仍是上一个P的进度,会导致"切P跳到上一P的上次播放位置"。
     // 用 firstCid 记录首次进入的分P,只有 curCid == firstCid 才应用断点。
@@ -260,7 +267,7 @@ initialSec = if (bookmarkSeekSec != null) bookmarkSeekSec
                         onSeekConsumed = { seekRequest = null },
                         onZoomChanged = { zoomed = it },
                         resetZoomTrigger = resetZoomTrigger,
-                        localPath = localPath,
+                        localPath = effectiveLocalPath,
                         onCache = onCache,
                         caching = caching,
                         cacheMsg = cacheMsg
@@ -549,7 +556,7 @@ private fun Player(
     onZoomChanged: (Boolean) -> Unit = {},
     resetZoomTrigger: Int = 0,
     localPath: String? = null,
-    onCache: ((Int) -> Unit)? = null,
+    onCache: ((Int, Long) -> Unit)? = null,
     caching: Boolean = false,
     cacheMsg: String = ""
 ) {
@@ -914,10 +921,16 @@ private fun Player(
     }
 
     // 生命周期
+    // v0.4.20: 支持后台播放——background_play 开关开启时,退后台不暂停(继续听)。
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, ev ->
             when (ev) {
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> { onFlush(exo.currentPosition / 1000); exo.playWhenReady = false }
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    onFlush(exo.currentPosition / 1000)
+                    val bg = ctx.getSharedPreferences("bililite_pref", Context.MODE_PRIVATE)
+                        .getBoolean("background_play", false)
+                    if (!bg) exo.playWhenReady = false
+                }
                 else -> {}
             }
         }
@@ -1022,11 +1035,12 @@ private fun Player(
             }
         }
         // 统一 transform 容器：TextureView + 手势层都在其内，避免双重缩放
+        // v0.4.20: 仅全屏允许缩放;且缩放/平移统一由 transformable 处理(支持连续多次缩放)
         Box(Modifier.fillMaxSize()
             .graphicsLayer {
                 scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y
             }
-            .transformable(transformState)
+            .transformable(transformState, enabled = fullscreen)
         ) {
             // 视频容器：AspectRatioFrameLayout(FIT) 保持原比例，TextureView 不被拉伸
             // v0.3: keepScreenOn——学习播放中屏幕保持常亮不息屏
@@ -1082,15 +1096,9 @@ private fun Player(
             Box(Modifier.fillMaxSize()
                 .pointerInput(zoomed, screenLocked) {
                     if (!screenLocked && zoomed) {
-                        // 缩放状态：单指拖动 = 平移画面（调用 transform 的 offset）
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val maxX = ctx.resources.displayMetrics.widthPixels * (scale - 1f) / 2f
-                            val maxY = ctx.resources.displayMetrics.heightPixels * (scale - 1f) / 2f
-                            offset = Offset(
-                                (offset.x + dragAmount.x).coerceIn(-maxX, maxX),
-                                (offset.y + dragAmount.y).coerceIn(-maxY, maxY))
-                        }
+                        // v0.4.20: 缩放状态下，平移/缩放统一交给 transformable 处理，
+                        // 这里不再用 detectDragGestures 抢手势，避免与 transformable 冲突导致
+                        // "缩放后无法继续缩放"。此处只做空实现(手势由上层 transformable 接管)。
                     } else {
                         // 非缩放状态:上/下滑 = 左亮度/右音量;左/右滑 = 进度 seek(全屏)。
                         // v0.4.4:改用 detectDragGestures 判定主轴,新增全屏左右拖动进度。
@@ -1120,7 +1128,7 @@ private fun Player(
                                 vertAccum += dragAmount.y
                                 if (dragSide == null) {
                                     dragSide = when {
-                                        fullscreen && kotlin.math.abs(horizAccum) > kotlin.math.abs(vertAccum) -> 2
+                                        kotlin.math.abs(horizAccum) > kotlin.math.abs(vertAccum) -> 2  // 左右滑 = 调进度(手机/平板/全屏均生效)
                                         kotlin.math.abs(vertAccum) > kotlin.math.abs(horizAccum) ->
                                             if (startX < size.width / 2f) 0 else 1
                                         else -> null
@@ -1187,14 +1195,26 @@ private fun Player(
             )
         }
 
-        // 亮度/音量/倍速指示器
+        // 亮度/音量/倍速/进度指示器。倍速提示显示在顶部,其余(亮度/音量/进度)居中。
         indicator?.let { (label, pct) ->
             Surface(color = Color(0xAA000000), shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.align(Alignment.Center)) {
+                modifier = Modifier.align(if (label == "倍速") Alignment.TopCenter else Alignment.Center)
+                    .then(if (label == "倍速") Modifier.padding(top = 16.dp) else Modifier)) {
                 Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     if (label == "倍速") {
                         Text("2x", color = Color.White, fontSize = 28.sp,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    } else if (label == "进度") {
+                        // 左右滑动调进度:显示进度百分比 + 时间
+                        Text("进度", color = Color.White, fontSize = 13.sp)
+                        Spacer(Modifier.height(4.dp))
+                        // 进度条
+                        Box(Modifier.width(120.dp).height(4.dp).background(Color(0x40FFFFFF), RoundedCornerShape(2.dp))) {
+                            Box(Modifier.fillMaxWidth((pct / 100f).coerceIn(0f, 1f)).height(4.dp)
+                                .background(Color.White, RoundedCornerShape(2.dp)))
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text("$pct%", color = Color.White, fontSize = 14.sp)
                     } else {
                         Icon(
                             imageVector = if (label == "亮度") Icons.Filled.BrightnessHigh else Icons.Filled.VolumeUp,
@@ -1371,7 +1391,7 @@ private fun Player(
                                     ).forEach { (qn, label) ->
                                         DropdownMenuItem(
                                             text = { Text(label, color = com.bililite.core.C.t1, fontSize = 13.sp) },
-                                            onClick = { showCacheQuality = false; onCache(qn) })
+                                            onClick = { showCacheQuality = false; onCache(qn, cid) })
                                     }
                                 }
                             }

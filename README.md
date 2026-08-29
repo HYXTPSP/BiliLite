@@ -68,6 +68,15 @@ BiliLite 是一款用极简风格设计的,专注于学习的学习版 B 站,从
   </tr>
 </table>
 
+### 主题插件效果
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/plugin_theme_miku.jpg" width="420"><br><b>Miku主题插件</b><br>初音未来风格主题</td>
+    <td align="center"><img src="docs/screenshots/plugin_theme_wild.jpg" width="420"><br><b>原野主题插件</b><br>自然原野风格主题</td>
+  </tr>
+</table>
+
 ## 技术栈
 
 - Kotlin + Jetpack Compose
@@ -95,6 +104,8 @@ export ANDROID_HOME=/opt/android-sdk
 - `feature_subtitle_size`:字幕大小调节插件示例
 
 打包脚本: `pack_plugins.sh`
+
+完整插件开发规范见 [插件开发规范.md](插件开发规范.md)
 
 ## 许可证
 

@@ -148,7 +148,7 @@ class PluginManager private constructor(private val ctx: Context) {
         }
     }
 
-    /** 卸载插件:删目录 + 从注册表移除 + 清理启用状态 */
+    /** 卸载插件:删目录 + 从注册表移除 + 清理启用状态 + 清理其注册的菜单/导出/禁用 */
     fun uninstall(id: String) {
         plugins.firstOrNull { it.id == id }?.let { p ->
             try { File(p.installedDir).deleteRecursively() } catch (_: Exception) {}
@@ -156,6 +156,12 @@ class PluginManager private constructor(private val ctx: Context) {
         plugins = plugins.filter { it.id != id }
         prefs.edit().remove(KEY_ENABLED + id).apply()
         refreshEnabled()
+        // v0.4.20: 清理插件注册的 UI 菜单、跨插件导出、禁用标记
+        PluginMenus.clearPlugin(id)
+        PluginShared.clearPlugin(id)
+        // 重新应用剩余插件的 disable(被卸载插件禁用的功能恢复)
+        FeatureGate.clear()
+        plugins.forEach { p -> if (p.disable.isNotEmpty()) FeatureGate.disable(p.disable) }
     }
 
     /** 设置启用/禁用状态(立即持久化) */

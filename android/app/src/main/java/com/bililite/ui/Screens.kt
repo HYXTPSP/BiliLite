@@ -33,6 +33,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.bililite.core.BiliApi
 import com.bililite.core.LoginSession
+import com.bililite.plugin.PluginRuntime
 import com.bililite.core.C
 import com.bililite.core.BiliTheme
 import com.bililite.data.*
@@ -47,10 +48,10 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         dedeUserId = LoginSession.dedeUserId(ctx)
     }
     // v0.4.1 离线缓存状态(必须在 init 块之前声明,否则 loadCached() 访问未初始化委托导致闪退)
-    data class CachedVideo(val bvid: String, val cid: Long, val title: String, val path: String, val size: Long)
+    data class CachedVideo(val bvid: String, val cid: Long, val title: String, val partTitle: String, val path: String, val size: Long)
     // v0.4.19: 缓存任务(队列)。status: 排队/下载中/完成/失败;progress 0..100;qn 目标清晰度
     data class CacheTask(
-        val bvid: String, val cid: Long, val title: String, val qn: Int = 64,
+        val bvid: String, val cid: Long, val title: String, val partTitle: String, val qn: Int = 64,
         var status: String = "排队中", var progress: Int = 0, var done: Long = 0, var total: Long = 0
     )
     var cachedVideos by mutableStateOf<List<CachedVideo>>(emptyList()); private set
@@ -787,7 +788,7 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
             (0 until arr.length()).mapNotNull { i ->
                 val o = arr.optJSONObject(i) ?: return@mapNotNull null
                 CachedVideo(o.optString("bvid"), o.optLong("cid"), o.optString("title"),
-                    o.optString("path"), o.optLong("size"))
+                    o.optString("partTitle", ""), o.optString("path"), o.optLong("size"))
             }
         } catch (_: Exception) { emptyList() }
     }
@@ -797,7 +798,7 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         list.forEach { c ->
             arr.put(org.json.JSONObject().apply {
                 put("bvid", c.bvid); put("cid", c.cid); put("title", c.title)
-                put("path", c.path); put("size", c.size)
+                put("partTitle", c.partTitle); put("path", c.path); put("size", c.size)
             })
         }
         cachePrefs.edit().putString("list", arr.toString()).apply()
@@ -809,23 +810,25 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         cachedVideos.firstOrNull { it.bvid == bvid && it.cid == cid }
             ?.path?.takeIf { java.io.File(it).exists() }
 
-    /** 缓存当前视频(v0.4.19 队列化:加入队列,逐个下载,每个任务带独立进度)。qn 为目标清晰度。 */
-    fun cacheVideo(v: Video, cid: Long, qn: Int = 64) {
-        // 已缓存则提示
-        if (cachedVideos.any { it.bvid == v.bvid }) {
-            android.widget.Toast.makeText(ctx, "该视频已缓存", android.widget.Toast.LENGTH_SHORT).show()
+    /** 缓存当前视频(v0.4.19 队列化:加入队列,逐个下载,每个任务带独立进度)。qn 为目标清晰度。
+     *  v0.4.20: 按 bvid+cid 精确去重,让合集中每一P都能独立缓存。 */
+    fun cacheVideo(v: Video, cid: Long, qn: Int = 64, partTitle: String = "") {
+        // 已缓存(同 bvid 且同 cid)则提示
+        if (cachedVideos.any { it.bvid == v.bvid && it.cid == cid }) {
+            android.widget.Toast.makeText(ctx, "该分P已缓存", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        // 已在队列中则提示
-        if (cacheTasks.any { it.bvid == v.bvid }) {
-            android.widget.Toast.makeText(ctx, "该视频已在缓存队列中", android.widget.Toast.LENGTH_SHORT).show()
+        // 已在队列中(同 bvid 且同 cid)则提示
+        if (cacheTasks.any { it.bvid == v.bvid && it.cid == cid }) {
+            android.widget.Toast.makeText(ctx, "该分P已在缓存队列中", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        val task = CacheTask(v.bvid, cid, v.title, qn)
+        val task = CacheTask(v.bvid, cid, v.title, partTitle, qn)
         cacheTasks = cacheTasks + task
         cacheMsg = "已加入缓存队列: ${v.title.take(14)}"
         // v0.4.19: 点击缓存给明确反馈(Toast 弹窗)
         android.widget.Toast.makeText(ctx, "已开始缓存: ${v.title.take(14)}", android.widget.Toast.LENGTH_SHORT).show()
+        // 让队列继续跑(若有正在运行的任务,新任务会被下一个 while 循环接住)
         if (cacheQueueRunner?.isActive == true) return
         cacheQueueRunner = viewModelScope.launch { processCacheQueue() }
     }
@@ -838,31 +841,40 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
                 val idx = cacheTasks.indexOfFirst { it.status == "排队中" }
                 if (idx < 0) break
                 val t = cacheTasks[idx]
-                updateTask(t.bvid) { it.status = "下载中" }
+                updateTask(t.bvid, t.cid) { it.status = "下载中" }
                 try {
                     downloadOne(t)
                 } catch (e: Exception) {
-                    updateTask(t.bvid) { it.status = "失败"; it.progress = 0 }
+                    updateTask(t.bvid, t.cid) { it.status = "失败"; it.progress = 0 }
                 }
             }
         } finally { caching = false }
     }
 
-    // 队列中同一 bvid 只保留一个任务,故按 bvid 匹配更新即可(cid 解析后也仍能命中)
-    private fun updateTask(bvid: String, mutate: (CacheTask) -> Unit) {
+    // v0.4.20: 队列按 bvid+cid 精确匹配,让合集每一P独立缓存、互不干扰
+    private fun updateTask(bvid: String, cid: Long, mutate: (CacheTask) -> Unit) {
         cacheTasks = cacheTasks.map { task ->
-            if (task.bvid == bvid) task.copy().also(mutate) else task
+            if (task.bvid == bvid && task.cid == cid) task.copy().also(mutate) else task
         }
     }
 
-    /** 下载单个任务(把真实 cid 回填到任务,下载完成写入 cachedVideos) */
+    /** 下载单个任务,下载完成写入 cachedVideos(按 bvid+cid 隔离) */
     private suspend fun downloadOne(t: CacheTask) {
         var realCid = t.cid
+        var partTitle = t.partTitle
         if (realCid == 0L) {
             realCid = withContext(Dispatchers.IO) {
                 api.pagelist(t.bvid).optJSONObject(0)?.optLong("cid", 0L) ?: 0L
             }
-            if (realCid == 0L) { updateTask(t.bvid) { it.status = "失败" }; return }
+            if (realCid == 0L) { updateTask(t.bvid, t.cid) { it.status = "失败" }; return }
+        }
+        // 分P标题为空时,用 pagelist 查对应 cid 的 part(用于离线缓存列表显示"第N集"等)
+        if (partTitle.isBlank()) {
+            partTitle = try {
+                val arr = withContext(Dispatchers.IO) { api.pagelist(t.bvid) }
+                (0 until arr.length()).firstOrNull { arr.optJSONObject(it)?.optLong("cid", 0L) == realCid }
+                    ?.let { arr.optJSONObject(it)?.optString("part", "") } ?: ""
+            } catch (_: Exception) { "" }
         }
         var stream = withContext(Dispatchers.IO) { api.playStream(t.bvid, realCid, t.qn) }
         var qn = t.qn
@@ -871,13 +883,13 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
             stream = withContext(Dispatchers.IO) { api.playStream(t.bvid, realCid, qn) }
         }
         val u = stream.videoUrl
-        if (u.isEmpty()) { updateTask(t.bvid) { it.status = "失败" }; return }
-        if (stream.audioUrl.isNotEmpty()) { updateTask(t.bvid) { it.status = "失败" }; return }
+        if (u.isEmpty()) { updateTask(t.bvid, realCid) { it.status = "失败" }; return }
+        if (stream.audioUrl.isNotEmpty()) { updateTask(t.bvid, realCid) { it.status = "失败" }; return }
         val dir = java.io.File(ctx.filesDir, "cache_videos"); dir.mkdirs()
         val f = java.io.File(dir, "${safeBvid(t.bvid)}_${realCid}.mp4")
         val ok = withContext(Dispatchers.IO) {
             api.downloadToFileProgress(u, f) { done, total ->
-                updateTask(t.bvid) { it2 ->
+                updateTask(t.bvid, realCid) { it2 ->
                     it2.done = done; it2.total = total
                     it2.progress = if (total > 0) (done * 100 / total).toInt().coerceIn(0, 100) else 0
                 }
@@ -889,15 +901,16 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
         if (ok) {
             val cur = cachedVideos.toMutableList()
             cur.removeAll { it.bvid == t.bvid && it.cid == realCid }
-            cur.add(CachedVideo(t.bvid, realCid, t.title, f.absolutePath, f.length()))
+            cur.add(CachedVideo(t.bvid, realCid, t.title, partTitle, f.absolutePath, f.length()))
             saveCached(cur)
             cacheMsg = "缓存完成 · ${t.title.take(12)}"
         } else {
             f.delete()
+            updateTask(t.bvid, realCid) { it.status = "失败"; it.progress = 0 }
             cacheMsg = "缓存失败 · ${t.title.take(12)}"
         }
-        // v0.4.19: 完成/失败的任务立即从队列移除(已缓存的自动进入"已缓存"列表)
-        cacheTasks = cacheTasks.filter { it.bvid != t.bvid }
+        // v0.4.20: 完成/失败的任务按 bvid+cid 从队列移除(不影响其他分P)
+        cacheTasks = cacheTasks.filter { !(it.bvid == t.bvid && it.cid == realCid) }
         // 结果提示 2.5 秒后自动清除
         kotlinx.coroutines.delay(2500)
         if (cacheMsg.startsWith("缓存完成") || cacheMsg.startsWith("缓存失败")) cacheMsg = ""
@@ -1060,7 +1073,7 @@ class BiliViewModel(private val db: BiliDb, private val ctx: Context) : ViewMode
                     val f = java.io.File(ctx.filesDir, "cache_videos/${safeBvid(bvid)}_${cid}.mp4")
                     if (f.exists()) {
                         cur.removeAll { it.bvid == bvid && it.cid == cid }
-                        cur.add(CachedVideo(bvid, cid, o.optString("title"), f.absolutePath, f.length()))
+                        cur.add(CachedVideo(bvid, cid, o.optString("title"), o.optString("partTitle", ""), f.absolutePath, f.length()))
                     }
                 }
                 saveCached(cur)
@@ -1662,6 +1675,16 @@ fun ProfileScreen(vm: BiliViewModel, onLoggedOut: () -> Unit = {},
             }, false),
             Triple("插件", { showPlugins = true }, false),
             Triple("账号管理", { showAccount = true }, false)))
+
+        // v0.4.20 插件系统:渲染插件通过 ui.registerMenu 注册的自定义入口
+        val pluginMenus = com.bililite.plugin.PluginMenus.menus
+        if (pluginMenus.isNotEmpty()) {
+            groupCard("插件功能", pluginMenus.map { m ->
+                Triple(m.label, {
+                    PluginRuntime.uiHandler?.post { try { m.handler.call() } catch (_: Exception) {} }
+                }, false)
+            })
+        }
 
         // 底部占满,QQ 群号贴最下方(还原为单一群号,16sp 加粗)
         Spacer(Modifier.weight(1f))
@@ -2518,7 +2541,10 @@ fun CacheScreen(vm: BiliViewModel, onBack: () -> Unit, onPlayCache: (Video, Stri
                     modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(c.title, color = C.t1, fontSize = 13.sp, maxLines = 2)
+                            // 分P标题(若有)+ 合集标题(最多12字,超出用…)
+                            val shortTitle = if (c.title.length > 12) c.title.take(12) + "…" else c.title
+                            val display = if (c.partTitle.isNotBlank()) "${c.partTitle} · $shortTitle" else shortTitle
+                            Text(display, color = C.t1, fontSize = 13.sp, maxLines = 2)
                             Text(fmtSize(c.size), color = C.t2, fontSize = 11.sp)
                         }
                         // 播放本地文件
